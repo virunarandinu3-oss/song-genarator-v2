@@ -3,15 +3,6 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Formatting Helper
-function formatLyrics(rawLyrics) {
-  if (!rawLyrics) return "";
-  return rawLyrics
-    .replace(/\\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -23,15 +14,14 @@ module.exports = async (req, res) => {
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
   const {
-    lyrics = '',                // ඔබගේ Custom Lyrics (අනිවාර්යයි)
-    style = 'Pop, EDM, Dance',  // Music Style / Genre
+    lyrics = '',                // User ගේ සාමාන්‍ය Lyrics
+    style = 'Pop, EDM, Dance',  // Music Style
     title = '',                 // Song Title (Optional)
-    mode = 'pro',               // 'pro' (v5) හෝ 'normal' (v4)
+    mode = 'pro',               // 'pro' හෝ 'normal'
     instrumental = false,
     token = process.env.REMUSIC_TOKEN || ''
   } = params;
 
-  // Lyrics ලබාදී නොමැති නම් උපදෙස් පෙන්වීම
   if (!lyrics && !instrumental) {
     return res.status(400).send(JSON.stringify({
       error: "Field 'lyrics' is required for song generation.",
@@ -42,7 +32,7 @@ module.exports = async (req, res) => {
   try {
     const anonymousUserId = crypto.randomUUID();
 
-    // 1. ගීතයේ මුලටම "Powered by Viru Beatz" Voice Tag එක Inject කිරීම
+    // 1. User ට නොපෙනී Server එක ඇතුළෙන්ම "Powered by Viru Beatz" Voice Tag එක මුලටම Inject කිරීම
     const producerTag = `[Intro]\n(Powered by Viru Beatz)\n\n`;
     const cleanUserLyrics = lyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
     const finalLyrics = producerTag + cleanUserLyrics;
@@ -50,11 +40,10 @@ module.exports = async (req, res) => {
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
     const finalTitle = title || (cleanUserLyrics ? cleanUserLyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
 
-    // 2. Remusic Custom Lyrics Payload (Mode: 2)
     const payload = {
       mode: 2, // Manual / Custom Lyrics Mode
       supplier: 12,
-      prompt: style, // Music Style
+      prompt: style,
       lyrics: isInstrumentalBool ? '' : finalLyrics,
       title: finalTitle,
       is_instrumental: isInstrumentalBool,
@@ -96,15 +85,14 @@ module.exports = async (req, res) => {
     const songData = response.data.data[0] || {};
     const songId = songData.song_id;
 
-    // පිරිසිදු කෙටි Initial Output
+    // Lyrics සම්පූර්ණයෙන්ම ඉවත් කළ Clean Initial Output
     const cleanOutput = {
       title: finalTitle,
       style: style,
       artist: "Viru Beatz",
       owner: "Viruna Randinu",
       song_id: songId,
-      check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null,
-      lyrics: formatLyrics(songData.lyrics || finalLyrics)
+      check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null
     };
 
     return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
