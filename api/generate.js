@@ -3,13 +3,16 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Producer Tag Injection
+// 1. Strict English & Producer Voice Tag Builder
 function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
-  const producerTag = `[Spoken Intro / Whisper]\n"Powered by Viru Beatz"\n\n`;
+  // Sinhala Unicode අකුරු ඉවත් කර 100% English Vocals වලට සකස් කිරීම
+  const cleanPrompt = prompt.replace(/[\u0D80-\u0DFF]/g, '').trim();
+  const producerTag = `[Voice Tag: "Powered by Viru Beatz"]\n[Beat Drop]\n\n`;
+
   if (lyricsMode === 'custom' && customLyrics) {
-    return `${producerTag}${customLyrics}\nStyle: ${style}`;
+    return `${producerTag}${customLyrics}\n\n[Style: ${style}, Language: English Vocals Only]`;
   } else {
-    return `[Intro: Spoken "Powered by Viru Beatz"]\n${prompt}\n${style}`;
+    return `[Intro: Producer Voice Tag "Powered by Viru Beatz"]\n${cleanPrompt}\nGenre: ${style}\nVocals: English lyrics only, professional studio quality.`;
   }
 }
 
@@ -27,7 +30,7 @@ module.exports = async (req, res) => {
     prompt = '',
     lyrics_mode = 'auto',
     custom_lyrics = '',
-    style = 'Happy, Pop, Electronic',
+    style = 'EDM, Dance, Pop',
     mode = 'pro',
     instrumental = false,
     token = process.env.REMUSIC_TOKEN || ''
@@ -37,7 +40,7 @@ module.exports = async (req, res) => {
     return res.status(400).send(JSON.stringify({
       success: false,
       error: "Prompt is required.",
-      usage: `https://${req.headers.host}/api/generate?prompt=Sinhala+Baila+remix&style=EDM&mode=pro`
+      usage: `https://${req.headers.host}/api/generate?prompt=Fast+club+banger&style=EDM,Pop&mode=pro`
     }, null, 2));
   }
 
@@ -57,7 +60,7 @@ module.exports = async (req, res) => {
 
     const headers = {
       'accept': 'application/json, text/plain, */*',
-      'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8,si;q=0.7',
+      'accept-language': 'en-US,en;q=0.9',
       'content-type': 'application/json',
       'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D${token ? `; token=${token}` : ''}`,
       'origin': 'https://remusic.ai',
@@ -82,7 +85,7 @@ module.exports = async (req, res) => {
     if (response.data.code !== 100000 || !response.data.data) {
       return res.status(400).send(JSON.stringify({
         success: false,
-        error: response.data.message || "Remusic creation failed",
+        error: response.data.message || "Generation rejected",
         details: response.data
       }, null, 2));
     }
@@ -92,25 +95,21 @@ module.exports = async (req, res) => {
     const title = songData.title || prompt;
     const audioUrl = songData.audio_url || '';
 
-    const jsonOutput = {
+    // Clean & Organized Output
+    const cleanOutput = {
       success: true,
-      branding: {
-        artist: "Viru Beatz",
-        owner: "Viruna Randinu",
-        tag: "Powered by Viru Beatz",
-        copyright: "Copyright 2026 Viruna Randinu"
-      },
-      song_id: songId,
       status: songData.status || "pending",
       percentage: `${songData.percentage || 4}%`,
       title: title,
+      artist: "Viru Beatz",
+      owner: "Viruna Randinu",
       stream_link: audioUrl || null,
       download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
       lyrics: songData.lyrics || "",
       check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null
     };
 
-    return res.status(200).send(JSON.stringify(jsonOutput, null, 2));
+    return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
 
   } catch (error) {
     const errorDetails = error.response ? error.response.data : error.message;
