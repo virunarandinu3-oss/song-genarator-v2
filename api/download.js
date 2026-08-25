@@ -17,10 +17,9 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 1. Audio Buffer එක බාගත කිරීම
     const audioRes = await axios.get(audio_url, {
       responseType: 'arraybuffer',
-      timeout: 45000,
+      timeout: 30000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       }
@@ -28,7 +27,6 @@ module.exports = async (req, res) => {
 
     let buffer = Buffer.from(audioRes.data);
 
-    // 2. ID3 Metadata Tags ලිවීම
     if (NodeID3) {
       try {
         const tags = {
@@ -49,19 +47,15 @@ module.exports = async (req, res) => {
         if (taggedBuffer && Buffer.isBuffer(taggedBuffer)) {
           buffer = taggedBuffer;
         }
-      } catch (tagErr) {
-        console.error('ID3 Tag write warning:', tagErr);
-      }
+      } catch (tagErr) {}
     }
 
-    // 3. MP3 File එක Browser එකට Stream කිරීම
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(song_title)}.mp3"`);
     res.setHeader('Content-Length', buffer.length);
     return res.send(buffer);
 
   } catch (error) {
-    // Fallback: කිසියම් දෝෂයක් ආවද සෘජුවම audio_url එකට redirect වී Download වේ
     return res.redirect(302, audio_url);
   }
 };
