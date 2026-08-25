@@ -3,9 +3,15 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
+// Free / Fast Rotating Proxy Gateways
+const PROXY_GATEWAYS = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  (url) => url // Direct Fallback
+];
+
 function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
-  
   let vocalInstruction = "Vocals: Professional studio vocals.";
   let introTag = `[Intro: Female Spoken Whisper]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
 
@@ -34,16 +40,6 @@ module.exports = async (req, res) => {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Response එක ගිය පසු Auto-Redeploy Hook එක Trigger කර Instance එක Kill කිරීම
-  res.on('finish', () => {
-    if (process.env.VERCEL_DEPLOY_HOOK) {
-      axios.post(process.env.VERCEL_DEPLOY_HOOK).catch(() => {});
-    }
-    setTimeout(() => {
-      try { process.exit(0); } catch (e) {}
-    }, 50);
-  });
-
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
   const {
@@ -52,8 +48,7 @@ module.exports = async (req, res) => {
     voice = 'collab',
     title = '',
     mode = 'pro',
-    instrumental = false,
-    token = process.env.REMUSIC_TOKEN || ''
+    instrumental = false
   } = params;
 
   if (!lyrics && !instrumental) {
@@ -84,7 +79,7 @@ module.exports = async (req, res) => {
       'accept': 'application/json, text/plain, */*',
       'accept-language': 'en-US,en;q=0.9',
       'content-type': 'application/json',
-      'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D${token ? `; token=${token}` : ''}`,
+      'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
       'origin': 'https://remusic.ai',
       'priority': 'u=1, i',
       'referer': 'https://remusic.ai/ai-music-generator',
@@ -97,21 +92,33 @@ module.exports = async (req, res) => {
       'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     };
 
-    if (token) {
-      headers['authorization'] = `Bearer ${token}`;
-      headers['x-token'] = token;
+    let songData = null;
+    let lastError = null;
+
+    // Proxy Gateways හරහා මාරුවෙන් මාරුවට Request එක යැවීම (Auto-Bypass)
+    for (const getProxyUrl of PROXY_GATEWAYS) {
+      try {
+        const targetEndpoint = getProxyUrl(REMUSIC_API_ENDPOINT);
+        const response = await axios.post(targetEndpoint, payload, { headers, timeout: 25000 });
+
+        if (response.data && response.data.code === 100000 && response.data.data) {
+          songData = response.data.data[0];
+          break; // සාර්ථක වූ සැණින් Loop එක නවත්වන්න
+        } else {
+          lastError = response.data;
+        }
+      } catch (err) {
+        lastError = err.response ? err.response.data : err.message;
+      }
     }
 
-    const response = await axios.post(REMUSIC_API_ENDPOINT, payload, { headers, timeout: 20000 });
-
-    if (response.data.code !== 100000 || !response.data.data) {
+    if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: response.data.message || "Generation rejected",
-        details: response.data
+        error: "All gateways busy. Please try again in 5 seconds.",
+        details: lastError
       }, null, 2));
     }
 
-    const songData = response.data.data[0] || {};
     const songId = songData.song_id;
     const finalTitle = songData.title || cleanTitle;
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
@@ -131,10 +138,9 @@ module.exports = async (req, res) => {
     return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
 
   } catch (error) {
-    const errorDetails = error.response ? error.response.data : error.message;
-    return res.status(error.response ? error.response.status : 500).send(JSON.stringify({
+    return res.status(500).send(JSON.stringify({
       error: "Generation Failed",
-      details: errorDetails
+      details: error.message
     }, null, 2));
   }
 };
