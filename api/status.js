@@ -15,8 +15,7 @@ module.exports = async (req, res) => {
   if (!song_id) {
     return res.status(400).send(JSON.stringify({
       success: false,
-      error: "Parameter 'song_id' is required",
-      usage: `https://${req.headers.host}/api/status?song_id=YOUR_SONG_ID`
+      error: "Parameter 'song_id' is required"
     }, null, 2));
   }
 
@@ -32,8 +31,7 @@ module.exports = async (req, res) => {
   const candidateEndpoints = [
     () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id: song_id }, { headers, timeout: 10000 }),
     () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music`, { song_id: song_id }, { headers, timeout: 10000 }),
-    () => axios.get(`${REMUSIC_BASE}/api/v1/ai-music/music/${song_id}`, { headers, timeout: 10000 }),
-    () => axios.get(`${REMUSIC_BASE}/api/v1/ai-music/song?song_id=${song_id}`, { headers, timeout: 10000 })
+    () => axios.get(`${REMUSIC_BASE}/api/v1/ai-music/music/${song_id}`, { headers, timeout: 10000 })
   ];
 
   let songData = null;
@@ -57,31 +55,26 @@ module.exports = async (req, res) => {
     const percentage = songData.percentage || (isComplete ? 100 : 50);
     const title = songData.title || "Viru Beatz Track";
 
-    const jsonOutput = {
+    // Clean, Minimal & Pretty Output
+    const cleanOutput = {
       success: true,
-      branding: {
-        artist: "Viru Beatz",
-        owner: "Viruna Randinu",
-        tag: "Powered by Viru Beatz",
-        copyright: "Copyright 2026 Viruna Randinu"
-      },
-      song_id: song_id,
       status: isComplete ? "complete" : (songData.status || "rendering"),
       percentage: `${percentage}%`,
       title: title,
+      artist: "Viru Beatz",
+      owner: "Viruna Randinu",
       stream_link: audioUrl || null,
       download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
       lyrics: songData.lyrics || "",
       check_status_url: `https://${req.headers.host}/api/status?song_id=${song_id}`
     };
 
-    return res.status(200).send(JSON.stringify(jsonOutput, null, 2));
+    return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
   }
 
   return res.status(500).send(JSON.stringify({
     success: false,
-    error: "Could not fetch song status",
-    song_id: song_id,
+    error: "Could not fetch status",
     details: lastError
   }, null, 2));
 };
