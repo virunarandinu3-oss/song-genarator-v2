@@ -2,6 +2,14 @@ const axios = require('axios');
 
 const REMUSIC_BASE = 'https://remusic.ai';
 
+function formatLyrics(rawLyrics) {
+  if (!rawLyrics) return "";
+  return rawLyrics
+    .replace(/\\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -14,7 +22,6 @@ module.exports = async (req, res) => {
 
   if (!song_id) {
     return res.status(400).send(JSON.stringify({
-      success: false,
       error: "Parameter 'song_id' is required"
     }, null, 2));
   }
@@ -54,10 +61,9 @@ module.exports = async (req, res) => {
     const isComplete = songData.status === 'complete' || songData.status === 'completed' || !!audioUrl;
     const percentage = songData.percentage || (isComplete ? 100 : 50);
     const title = songData.title || "Viru Beatz Track";
+    const formattedLyrics = formatLyrics(songData.lyrics);
 
-    // Clean, Minimal & Pretty Output
-    const cleanOutput = {
-      success: true,
+    const cleanStatusOutput = {
       status: isComplete ? "complete" : (songData.status || "rendering"),
       percentage: `${percentage}%`,
       title: title,
@@ -65,15 +71,14 @@ module.exports = async (req, res) => {
       owner: "Viruna Randinu",
       stream_link: audioUrl || null,
       download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
-      lyrics: songData.lyrics || "",
+      lyrics: formattedLyrics,
       check_status_url: `https://${req.headers.host}/api/status?song_id=${song_id}`
     };
 
-    return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
+    return res.status(200).send(JSON.stringify(cleanStatusOutput, null, 2));
   }
 
   return res.status(500).send(JSON.stringify({
-    success: false,
     error: "Could not fetch status",
     details: lastError
   }, null, 2));
