@@ -19,9 +19,7 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
@@ -60,7 +58,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 1. SCENARIO 1: Check Status by song_id (Instant Status Check)
+    // 1. SCENARIO 1: Check Status by song_id
     if (song_id) {
       let songData = null;
       try {
@@ -68,7 +66,7 @@ module.exports = async (req, res) => {
         songData = resp.data?.data?.[0] || resp.data?.data || resp.data;
       } catch (e) {}
 
-      if (songData) {
+      if (songData && typeof songData === 'object') {
         const audioUrl = songData.audio_url || songData.url || '';
         const isComplete = songData.status === 'complete' || songData.status === 'completed' || !!audioUrl;
         const percentage = songData.percentage || (isComplete ? 100 : 50);
@@ -93,15 +91,21 @@ module.exports = async (req, res) => {
         };
 
         return res.status(200).send(JSON.stringify(jsonOutput, null, 2));
+      } else {
+        return res.status(404).send(JSON.stringify({
+          success: false,
+          error: "Song ID not found or still queued",
+          song_id: song_id
+        }, null, 2));
       }
     }
 
-    // 2. SCENARIO 2: Create New Song (Instant 1-Second Response)
+    // 2. SCENARIO 2: Create New Song
     if (!prompt && lyrics_mode === 'auto') {
       return res.status(400).send(JSON.stringify({
         success: false,
-        error: "Parameter 'prompt' is required to create a song.",
-        usage_example: `https://${req.headers.host}/api/generate?prompt=Sinhala+Baila+remix&style=EDM&mode=pro`
+        error: "Prompt is required to create a song.",
+        usage: `https://${req.headers.host}/api/generate?prompt=Sinhala+Baila+remix&style=EDM&mode=pro`
       }, null, 2));
     }
 
@@ -118,8 +122,18 @@ module.exports = async (req, res) => {
     };
 
     const initialRes = await axios.post(REMUSIC_API_ENDPOINT, payload, { headers, timeout: 15000 });
-    const songData = initialRes.data?.data?.[0] || {};
-    const createdSongId = songData.song_id || null;
+
+    // Remusic Error Check
+    if (initialRes.data.code !== 100000 || !initialRes.data.data) {
+      return res.status(400).send(JSON.stringify({
+        success: false,
+        error: initialRes.data.message || "Remusic creation rejected",
+        details: initialRes.data
+      }, null, 2));
+    }
+
+    const songData = initialRes.data.data[0] || {};
+    const createdSongId = songData.song_id;
     const title = songData.title || prompt;
     const audioUrl = songData.audio_url || '';
 
