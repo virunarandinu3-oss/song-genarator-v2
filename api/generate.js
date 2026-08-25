@@ -3,6 +3,30 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
+// 1. Rotating Real Browser Fingerprints (User-Agents & Client Hints)
+const BROWSER_FINGERPRINTS = [
+  {
+    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    platform: '"Windows"',
+    sec_ua: '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"'
+  },
+  {
+    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    platform: '"macOS"',
+    sec_ua: '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"'
+  },
+  {
+    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
+    platform: '"Windows"',
+    sec_ua: '"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"'
+  },
+  {
+    ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    platform: '"Linux"',
+    sec_ua: '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"'
+  }
+];
+
 // Producer Tag Injection
 function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
   const producerTag = `[Spoken Intro / Whisper]\n"Powered by Viru Beatz"\n\n`;
@@ -23,36 +47,36 @@ module.exports = async (req, res) => {
     return res.status(200).end();
   }
 
-  // GET (Query Parameters) හෝ POST (Request Body) මඟින් දත්ත ලබාගැනීම
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
   const {
     prompt = '',
-    lyrics_mode = 'auto',       // 'auto' හෝ 'custom'
+    lyrics_mode = 'auto',
     custom_lyrics = '',
     style = 'Happy, Pop',
-    mode = 'pro',               // 'normal' (v4) හෝ 'pro' (v5)
+    mode = 'pro',
     instrumental = false
   } = params;
 
-  // Prompt එක නොමැති නම් උපදෙස් පෙන්වීම
   if (!prompt && lyrics_mode === 'auto') {
     return res.status(400).json({
       success: false,
-      error: 'Prompt is required.',
-      example_usage: `https://${req.headers.host}/api/generate?prompt=Sinhala+Baila+remix&style=EDM,Dance&mode=pro`
+      error: 'Prompt is required.'
     });
   }
 
   try {
-    // 1. Random User Session ID
-    const anonymousUserId = crypto.randomUUID();
+    // 1. සෑම Request එකකටම සම්පූර්ණයෙන්ම අලුත් Guest User ID එකක් සහ Cache Reset එකක්
+    const freshAnonymousUserId = crypto.randomUUID();
+    const randomDeviceId = crypto.randomBytes(8).toString('hex');
+    
+    // 2. අහඹු Browser Fingerprint එකක් තෝරාගැනීම
+    const fingerprint = BROWSER_FINGERPRINTS[Math.floor(Math.random() * BROWSER_FINGERPRINTS.length)];
 
-    // 2. Producer Tag Inject කිරීම
+    // 3. Producer Tag එකතු කළ Prompt එක
     const finalPrompt = buildFinalPrompt(prompt, style, custom_lyrics, lyrics_mode);
-
-    // 3. Payload
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
+
     const payload = {
       mode: lyrics_mode === 'custom' ? 2 : 1,
       supplier: 12,
@@ -62,25 +86,25 @@ module.exports = async (req, res) => {
       mv: mode === 'normal' ? 'v4' : 'v5'
     };
 
-    // 4. Headers
+    // 4. Fresh Browser Headers & Cookies
     const headers = {
       'accept': 'application/json, text/plain, */*',
-      'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8,si;q=0.7',
+      'accept-language': 'en-US,en;q=0.9',
       'content-type': 'application/json',
-      'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
+      'cookie': `anonymous_user_id=${freshAnonymousUserId}; _ga=GA1.1.${Math.floor(Math.random()*1000000000)}.${Math.floor(Date.now()/1000)}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
       'origin': 'https://remusic.ai',
       'priority': 'u=1, i',
       'referer': 'https://remusic.ai/ai-music-generator',
-      'sec-ch-ua': '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+      'sec-ch-ua': fingerprint.sec_ua,
       'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
+      'sec-ch-ua-platform': fingerprint.platform,
       'sec-fetch-dest': 'empty',
       'sec-fetch-mode': 'cors',
       'sec-fetch-site': 'same-origin',
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
+      'user-agent': fingerprint.ua
     };
 
-    // 5. Remusic වෙත Request එක යැවීම
+    // 5. Remusic API Call
     const response = await axios.post(REMUSIC_API_ENDPOINT, payload, {
       headers: headers,
       timeout: 60000
@@ -96,6 +120,7 @@ module.exports = async (req, res) => {
         tag: "Powered by Viru Beatz",
         copyright: "Copyright 2026 Viruna Randinu"
       },
+      fresh_session_id: freshAnonymousUserId,
       song_id: songData.song_id || null,
       status: songData.status || "pending",
       title: songData.title || prompt,
