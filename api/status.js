@@ -2,14 +2,6 @@ const axios = require('axios');
 
 const REMUSIC_BASE = 'https://remusic.ai';
 
-function formatLyrics(rawLyrics) {
-  if (!rawLyrics) return "";
-  return rawLyrics
-    .replace(/\\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -62,6 +54,7 @@ module.exports = async (req, res) => {
     const percentage = songData.percentage || (isComplete ? 100 : 50);
     const title = songData.title || "Viru Beatz Track";
 
+    // Lyrics සම්පූර්ණයෙන්ම ඉවත් කළ Clean Final Output
     const cleanStatusOutput = {
       status: isComplete ? "complete" : (songData.status || "rendering"),
       percentage: `${percentage}%`,
@@ -70,7 +63,6 @@ module.exports = async (req, res) => {
       owner: "Viruna Randinu",
       stream_link: audioUrl || null,
       download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
-      lyrics: formatLyrics(songData.lyrics),
       check_status_url: `https://${req.headers.host}/api/status?song_id=${song_id}`
     };
 
