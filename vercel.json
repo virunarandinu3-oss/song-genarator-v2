@@ -12,6 +12,10 @@
     {
       "src": "/api/download",
       "dest": "/api/download.js"
+    },
+    {
+      "src": "/api/cover",
+      "dest": "/api/cover.js"
     }
   ]
 }
