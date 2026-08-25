@@ -8,6 +8,10 @@
     {
       "src": "/api/download",
       "dest": "/api/download.js"
+    },
+    {
+      "src": "/",
+      "dest": "/api/generate.js"
     }
   ]
 }
