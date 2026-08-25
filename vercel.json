@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "regions": ["iad1", "sfo1", "hnd1", "lhr1", "cdg1", "sin1", "syd1", "kix1", "icn1", "bom1"],
   "routes": [
     {
       "src": "/api/generate",
