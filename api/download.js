@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
   try {
     const audioRes = await axios.get(audio_url, {
       responseType: 'arraybuffer',
-      timeout: 30000,
+      timeout: 35000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       }
