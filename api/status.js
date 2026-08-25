@@ -54,16 +54,12 @@ module.exports = async (req, res) => {
     const percentage = songData.percentage || (isComplete ? 100 : 50);
     const title = songData.title || "Viru Beatz Track";
 
-    // Lyrics සම්පූර්ණයෙන්ම ඉවත් කළ Clean Final Output
+    // 2. Status Output (title, artist, owner, check_status_url ඉවත් කර තනි පේළියට download_link සකසා ඇත)
     const cleanStatusOutput = {
       status: isComplete ? "complete" : (songData.status || "rendering"),
       percentage: `${percentage}%`,
-      title: title,
-      artist: "Viru Beatz",
-      owner: "Viruna Randinu",
       stream_link: audioUrl || null,
-      download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
-      check_status_url: `https://${req.headers.host}/api/status?song_id=${song_id}`
+      download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null
     };
 
     return res.status(200).send(JSON.stringify(cleanStatusOutput, null, 2));
