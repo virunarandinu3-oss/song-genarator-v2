@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
     'content-type': 'application/json',
     'origin': REMUSIC_BASE,
     'referer': `${REMUSIC_BASE}/ai-music-generator`,
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     ...(token ? { 'authorization': `Bearer ${token}`, 'x-token': token } : {})
   };
 
@@ -54,7 +54,6 @@ module.exports = async (req, res) => {
     const percentage = songData.percentage || (isComplete ? 100 : 50);
     const title = songData.title || "Viru Beatz Track";
 
-    // 2. Status Output (title, artist, owner, check_status_url ඉවත් කර තනි පේළියට download_link සකසා ඇත)
     const cleanStatusOutput = {
       status: isComplete ? "complete" : (songData.status || "rendering"),
       percentage: `${percentage}%`,
