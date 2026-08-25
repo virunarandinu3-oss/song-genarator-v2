@@ -3,6 +3,13 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
+// Producer Voice Tag Builder (Direct Vocal Articulation)
+function buildFinalLyrics(userLyrics) {
+  const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
+  // වරහන් නොමැතිව direct vocal line එකක් ලෙස යැවීම
+  return `[Intro]\nPowered by Viru Beatz.\n\n${cleanUserLyrics}`;
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -14,10 +21,10 @@ module.exports = async (req, res) => {
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
   const {
-    lyrics = '',                // User ගේ සාමාන්‍ය Lyrics
-    style = 'Pop, EDM, Dance',  // Music Style
-    title = '',                 // Song Title (Optional)
-    mode = 'pro',               // 'pro' හෝ 'normal'
+    lyrics = '',
+    style = 'Pop, EDM, Dance',
+    title = '',
+    mode = 'pro',
     instrumental = false,
     token = process.env.REMUSIC_TOKEN || ''
   } = params;
@@ -25,27 +32,22 @@ module.exports = async (req, res) => {
   if (!lyrics && !instrumental) {
     return res.status(400).send(JSON.stringify({
       error: "Field 'lyrics' is required for song generation.",
-      example_usage: `https://${req.headers.host}/api/generate?lyrics=Dancing+in+the+neon+light+feel+the+rhythm+all+night&style=EDM,Dance,Club&title=Neon+Party&mode=pro`
+      example_usage: `https://${req.headers.host}/api/generate?lyrics=Dancing+in+the+neon+light+all+night&style=EDM,Dance&title=Neon+Party&mode=pro`
     }, null, 2));
   }
 
   try {
     const anonymousUserId = crypto.randomUUID();
-
-    // 1. User ට නොපෙනී Server එක ඇතුළෙන්ම "Powered by Viru Beatz" Voice Tag එක මුලටම Inject කිරීම
-    const producerTag = `[Intro]\n(Powered by Viru Beatz)\n\n`;
-    const cleanUserLyrics = lyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
-    const finalLyrics = producerTag + cleanUserLyrics;
-
+    const finalLyrics = buildFinalLyrics(lyrics);
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
-    const finalTitle = title || (cleanUserLyrics ? cleanUserLyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
+    const cleanTitle = title || (lyrics ? lyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
 
     const payload = {
-      mode: 2, // Manual / Custom Lyrics Mode
+      mode: 2,
       supplier: 12,
-      prompt: style,
+      prompt: `${style}, modern electronic production`,
       lyrics: isInstrumentalBool ? '' : finalLyrics,
-      title: finalTitle,
+      title: cleanTitle,
       is_instrumental: isInstrumentalBool,
       is_public: true,
       mv: mode === 'normal' ? 'v4' : 'v5'
@@ -84,15 +86,17 @@ module.exports = async (req, res) => {
 
     const songData = response.data.data[0] || {};
     const songId = songData.song_id;
+    const finalTitle = songData.title || cleanTitle;
+    const imageUrl = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
 
-    // Lyrics සම්පූර්ණයෙන්ම ඉවත් කළ Clean Initial Output
+    // 1. First Output (song_id ඉවත් කර image_url ඇතුළත් කර ඇත)
     const cleanOutput = {
       title: finalTitle,
       style: style,
       artist: "Viru Beatz",
       owner: "Viruna Randinu",
-      song_id: songId,
-      check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null
+      image_url: imageUrl,
+      check_status_url: `https://${req.headers.host}/api/status?song_id=${songId}`
     };
 
     return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
