@@ -6,12 +6,12 @@
       "dest": "/api/generate.js"
     },
     {
-      "src": "/api/download",
-      "dest": "/api/download.js"
+      "src": "/api/status",
+      "dest": "/api/status.js"
     },
     {
-      "src": "/",
-      "dest": "/api/generate.js"
+      "src": "/api/download",
+      "dest": "/api/download.js"
     }
   ]
 }
