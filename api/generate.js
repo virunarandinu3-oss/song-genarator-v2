@@ -3,11 +3,10 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Producer Voice Tag Builder (Direct Vocal Articulation)
+// Female Whisper Producer Tag Builder
 function buildFinalLyrics(userLyrics) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
-  // වරහන් නොමැතිව direct vocal line එකක් ලෙස යැවීම
-  return `[Intro]\nPowered by Viru Beatz.\n\n${cleanUserLyrics}`;
+  return `[Intro: Female Spoken Whisper]\n[Female Voice: "Powered by Viru Beatz"]\n[Beat Drop]\n\n${cleanUserLyrics}`;
 }
 
 module.exports = async (req, res) => {
@@ -17,6 +16,13 @@ module.exports = async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Response එක ගිය සැණින් Container එක Clean Reset කිරීම
+  res.on('finish', () => {
+    setTimeout(() => {
+      try { process.exit(0); } catch (e) {}
+    }, 50);
+  });
 
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
@@ -42,10 +48,12 @@ module.exports = async (req, res) => {
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
     const cleanTitle = title || (lyrics ? lyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
 
+    const promptWithFemaleIntro = `Style: ${style}. Song intro starts with a sexy female spoken whisper voice tag: "Powered by Viru Beatz", followed by a heavy energetic beat drop.`;
+
     const payload = {
       mode: 2,
       supplier: 12,
-      prompt: `${style}, modern electronic production`,
+      prompt: promptWithFemaleIntro,
       lyrics: isInstrumentalBool ? '' : finalLyrics,
       title: cleanTitle,
       is_instrumental: isInstrumentalBool,
@@ -61,13 +69,13 @@ module.exports = async (req, res) => {
       'origin': 'https://remusic.ai',
       'priority': 'u=1, i',
       'referer': 'https://remusic.ai/ai-music-generator',
-      'sec-ch-ua': '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Windows"',
       'sec-fetch-dest': 'empty',
       'sec-fetch-mode': 'cors',
       'sec-fetch-site': 'same-origin',
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
     };
 
     if (token) {
@@ -87,15 +95,17 @@ module.exports = async (req, res) => {
     const songData = response.data.data[0] || {};
     const songId = songData.song_id;
     const finalTitle = songData.title || cleanTitle;
-    const imageUrl = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
+    const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
 
-    // 1. First Output (song_id ඉවත් කර image_url ඇතුළත් කර ඇත)
+    // Viru Beatz Branded Cover Image URL
+    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&img=${encodeURIComponent(rawImage)}`;
+
     const cleanOutput = {
       title: finalTitle,
       style: style,
       artist: "Viru Beatz",
       owner: "Viruna Randinu",
-      image_url: imageUrl,
+      image_url: brandedImageUrl,
       check_status_url: `https://${req.headers.host}/api/status?song_id=${songId}`
     };
 
