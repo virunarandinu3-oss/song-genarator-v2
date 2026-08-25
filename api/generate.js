@@ -3,17 +3,25 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// 1. Strict English & Producer Voice Tag Builder
+// Producer Tag & Prompt Builder
 function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
-  // Sinhala Unicode අකුරු ඉවත් කර 100% English Vocals වලට සකස් කිරීම
   const cleanPrompt = prompt.replace(/[\u0D80-\u0DFF]/g, '').trim();
-  const producerTag = `[Voice Tag: "Powered by Viru Beatz"]\n[Beat Drop]\n\n`;
+  const producerTag = `[Intro]\n(Powered by Viru Beatz)\n\n`;
 
   if (lyricsMode === 'custom' && customLyrics) {
-    return `${producerTag}${customLyrics}\n\n[Style: ${style}, Language: English Vocals Only]`;
+    return `${producerTag}${customLyrics}\n\n[Style: ${style}, English Vocals Only]`;
   } else {
-    return `[Intro: Producer Voice Tag "Powered by Viru Beatz"]\n${cleanPrompt}\nGenre: ${style}\nVocals: English lyrics only, professional studio quality.`;
+    return `[Intro: (Powered by Viru Beatz)]\nStart with the spoken intro line: "Powered by Viru Beatz"\n${cleanPrompt}\nGenre: ${style}\nVocals: English studio vocals only.`;
   }
+}
+
+// Lyrics Formatting Helper
+function formatLyrics(rawLyrics) {
+  if (!rawLyrics) return "";
+  return rawLyrics
+    .replace(/\\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 module.exports = async (req, res) => {
@@ -38,7 +46,6 @@ module.exports = async (req, res) => {
 
   if (!prompt && lyrics_mode === 'auto') {
     return res.status(400).send(JSON.stringify({
-      success: false,
       error: "Prompt is required.",
       usage: `https://${req.headers.host}/api/generate?prompt=Fast+club+banger&style=EDM,Pop&mode=pro`
     }, null, 2));
@@ -84,7 +91,6 @@ module.exports = async (req, res) => {
 
     if (response.data.code !== 100000 || !response.data.data) {
       return res.status(400).send(JSON.stringify({
-        success: false,
         error: response.data.message || "Generation rejected",
         details: response.data
       }, null, 2));
@@ -93,28 +99,23 @@ module.exports = async (req, res) => {
     const songData = response.data.data[0] || {};
     const songId = songData.song_id;
     const title = songData.title || prompt;
-    const audioUrl = songData.audio_url || '';
+    const formattedLyrics = formatLyrics(songData.lyrics);
 
-    // Clean & Organized Output
-    const cleanOutput = {
-      success: true,
-      status: songData.status || "pending",
-      percentage: `${songData.percentage || 4}%`,
+    // පිරිසිදු කෙටි Output එක (No percentage, No success, No stream/download links)
+    const cleanInitialOutput = {
       title: title,
       artist: "Viru Beatz",
       owner: "Viruna Randinu",
-      stream_link: audioUrl || null,
-      download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
-      lyrics: songData.lyrics || "",
-      check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null
+      song_id: songId,
+      check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null,
+      lyrics: formattedLyrics
     };
 
-    return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
+    return res.status(200).send(JSON.stringify(cleanInitialOutput, null, 2));
 
   } catch (error) {
     const errorDetails = error.response ? error.response.data : error.message;
     return res.status(error.response ? error.response.status : 500).send(JSON.stringify({
-      success: false,
       error: "Generation Failed",
       details: errorDetails
     }, null, 2));
