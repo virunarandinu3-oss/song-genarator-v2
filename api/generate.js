@@ -3,7 +3,7 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// 1. Producer Tag Injection
+// 1. Secret Producer Tag Injection
 function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
   const producerTag = `[Spoken Intro / Whisper]\n"Powered by Viru Beatz"\n\n`;
   if (lyricsMode === 'custom' && customLyrics) {
@@ -13,7 +13,7 @@ function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
   }
 }
 
-// 2. Polling Helper (Audio එක Render වන තුරු රැඳී සිටීම)
+// 2. Polling Helper
 async function pollForAudio(songId, headers, maxAttempts = 10, delayMs = 3500) {
   const candidateEndpoints = [
     () => axios.post(`https://remusic.ai/api/v1/ai-music/music/detail`, { song_id: songId }, { headers }),
@@ -30,15 +30,13 @@ async function pollForAudio(songId, headers, maxAttempts = 10, delayMs = 3500) {
         if (data.audio_url || data.url || data.status === 'complete' || data.status === 'completed') {
           return data;
         }
-      } catch (e) {
-        // Fallback retry
-      }
+      } catch (e) {}
     }
   }
   return null;
 }
 
-// 3. Pretty HTML Page Renderer for Browser
+// 3. Pretty HTML Page Renderer
 function renderPrettyHTML(songData, downloadUrl, rawJson) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -72,25 +70,29 @@ function renderPrettyHTML(songData, downloadUrl, rawJson) {
       <a class="btn-download" href="${downloadUrl}" target="_blank">⬇ Download MP3 (With Viru Beatz Metadata)</a>
     ` : `<p style="text-align: center; color: #fbbf24;">Song is rendering on server. Please refresh in a few seconds.</p>`}
 
-    <div class="lyrics-title">📝 Generated Lyrics (With Producer Tag):</div>
+    <div class="lyrics-title">📝 Generated Lyrics:</div>
     <div class="lyrics-box">${songData.lyrics || 'No lyrics available.'}</div>
 
-    <div class="lyrics-title" style="margin-top: 20px;">⚙ Raw API Response (JSON):</div>
+    <div class="lyrics-title" style="margin-top: 20px;">⚙ Raw API Response:</div>
     <pre class="json-box">${JSON.stringify(rawJson, null, 2)}</pre>
   </div>
 </body>
 </html>`;
 }
 
-// 4. Main Handler
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Response එක ගිය සැණින් Vercel Instance එක Reset/Restart කිරීම
+  res.on('finish', () => {
+    setTimeout(() => {
+      try { process.exit(0); } catch (e) {}
+    }, 100);
+  });
 
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
@@ -105,17 +107,12 @@ module.exports = async (req, res) => {
   } = params;
 
   if (!prompt && lyrics_mode === 'auto') {
-    return res.status(400).json({
-      success: false,
-      error: "Prompt is required.",
-      usage: `https://${req.headers.host}/api/generate?prompt=Sinhala+Baila&style=EDM&mode=pro`
-    });
+    return res.status(400).json({ success: false, error: "Prompt is required." });
   }
 
   try {
-    // 1. සම්පූර්ණයෙන්ම Fresh Anonymous User ID එකක් (Clean Storage State)
+    // Fresh Dynamic Identity
     const freshAnonymousUserId = crypto.randomUUID();
-
     const finalPrompt = buildFinalPrompt(prompt, style, custom_lyrics, lyrics_mode);
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
 
@@ -128,7 +125,6 @@ module.exports = async (req, res) => {
       mv: mode === 'normal' ? 'v4' : 'v5'
     };
 
-    // 2. 100% Genuine Consistent Chrome on Windows Headers
     const headers = {
       'accept': 'application/json, text/plain, */*',
       'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8,si;q=0.7',
@@ -146,7 +142,6 @@ module.exports = async (req, res) => {
       'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
     };
 
-    // 3. Request එක යැවීම
     const initialRes = await axios.post(REMUSIC_API_ENDPOINT, payload, { headers, timeout: 60000 });
     const initialData = initialRes.data?.data?.[0] || {};
     const songId = initialData.song_id;
@@ -155,7 +150,6 @@ module.exports = async (req, res) => {
       return res.status(200).json({ success: false, message: "Creation failed", details: initialRes.data });
     }
 
-    // 4. Auto-Polling for Finished Song
     const completedSong = await pollForAudio(songId, headers, 12, 3500);
     const audioUrl = completedSong?.audio_url || completedSong?.url || initialData.audio_url || '';
     const title = completedSong?.title || initialData.title || prompt;
