@@ -3,26 +3,7 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// 1. Rotating Browser Fingerprints
-const BROWSER_FINGERPRINTS = [
-  {
-    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    platform: '"Windows"',
-    sec_ua: '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"'
-  },
-  {
-    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-    platform: '"macOS"',
-    sec_ua: '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"'
-  },
-  {
-    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
-    platform: '"Windows"',
-    sec_ua: '"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"'
-  }
-];
-
-// 2. Secret Producer Tag Injection
+// 1. Producer Tag Injection
 function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
   const producerTag = `[Spoken Intro / Whisper]\n"Powered by Viru Beatz"\n\n`;
   if (lyricsMode === 'custom' && customLyrics) {
@@ -32,7 +13,7 @@ function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
   }
 }
 
-// 3. Polling Helper (Audio එක Render වන තුරු Backend එකෙන්ම රැඳී සිටීම)
+// 2. Polling Helper (Audio එක Render වන තුරු රැඳී සිටීම)
 async function pollForAudio(songId, headers, maxAttempts = 10, delayMs = 3500) {
   const candidateEndpoints = [
     () => axios.post(`https://remusic.ai/api/v1/ai-music/music/detail`, { song_id: songId }, { headers }),
@@ -50,14 +31,14 @@ async function pollForAudio(songId, headers, maxAttempts = 10, delayMs = 3500) {
           return data;
         }
       } catch (e) {
-        // Continue fallback attempts
+        // Fallback retry
       }
     }
   }
   return null;
 }
 
-// 4. Pretty HTML Page Renderer for Browser
+// 3. Pretty HTML Page Renderer for Browser
 function renderPrettyHTML(songData, downloadUrl, rawJson) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -101,7 +82,7 @@ function renderPrettyHTML(songData, downloadUrl, rawJson) {
 </html>`;
 }
 
-// 5. Main Handler
+// 4. Main Handler
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -120,21 +101,20 @@ module.exports = async (req, res) => {
     style = 'Happy, Pop, Electronic',
     mode = 'pro',
     instrumental = false,
-    format = '' // format=json දැමුවහොත් direct JSON response ලබාදේ
+    format = ''
   } = params;
 
   if (!prompt && lyrics_mode === 'auto') {
     return res.status(400).json({
       success: false,
       error: "Prompt is required.",
-      usage: `https://${req.headers.host}/api/generate?prompt=Sri+Lankan+Baila&style=EDM&mode=pro`
+      usage: `https://${req.headers.host}/api/generate?prompt=Sinhala+Baila&style=EDM&mode=pro`
     });
   }
 
   try {
-    // Fresh Incognito Identity Generation
+    // 1. සම්පූර්ණයෙන්ම Fresh Anonymous User ID එකක් (Clean Storage State)
     const freshAnonymousUserId = crypto.randomUUID();
-    const fingerprint = BROWSER_FINGERPRINTS[Math.floor(Math.random() * BROWSER_FINGERPRINTS.length)];
 
     const finalPrompt = buildFinalPrompt(prompt, style, custom_lyrics, lyrics_mode);
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
@@ -148,24 +128,25 @@ module.exports = async (req, res) => {
       mv: mode === 'normal' ? 'v4' : 'v5'
     };
 
+    // 2. 100% Genuine Consistent Chrome on Windows Headers
     const headers = {
       'accept': 'application/json, text/plain, */*',
-      'accept-language': 'en-US,en;q=0.9',
+      'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8,si;q=0.7',
       'content-type': 'application/json',
-      'cookie': `anonymous_user_id=${freshAnonymousUserId}; _ga=GA1.1.${Math.floor(Math.random()*1000000000)}.${Math.floor(Date.now()/1000)}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
+      'cookie': `anonymous_user_id=${freshAnonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
       'origin': 'https://remusic.ai',
       'priority': 'u=1, i',
       'referer': 'https://remusic.ai/ai-music-generator',
-      'sec-ch-ua': fingerprint.sec_ua,
+      'sec-ch-ua': '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
       'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': fingerprint.platform,
+      'sec-ch-ua-platform': '"Windows"',
       'sec-fetch-dest': 'empty',
       'sec-fetch-mode': 'cors',
       'sec-fetch-site': 'same-origin',
-      'user-agent': fingerprint.ua
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
     };
 
-    // Step 1: Create Song
+    // 3. Request එක යැවීම
     const initialRes = await axios.post(REMUSIC_API_ENDPOINT, payload, { headers, timeout: 60000 });
     const initialData = initialRes.data?.data?.[0] || {};
     const songId = initialData.song_id;
@@ -174,7 +155,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({ success: false, message: "Creation failed", details: initialRes.data });
     }
 
-    // Step 2: Auto-Poll for Completed Audio
+    // 4. Auto-Polling for Finished Song
     const completedSong = await pollForAudio(songId, headers, 12, 3500);
     const audioUrl = completedSong?.audio_url || completedSong?.url || initialData.audio_url || '';
     const title = completedSong?.title || initialData.title || prompt;
@@ -198,13 +179,11 @@ module.exports = async (req, res) => {
       download_mp3: downloadLink
     };
 
-    // Browser එකෙන් open කළ විට ලස්සන HTML UI එක පෙන්වීම (format=json නොවේ නම්)
     if (req.method === 'GET' && format !== 'json' && (!req.headers.accept || req.headers.accept.includes('text/html'))) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(renderPrettyHTML(resultJson, downloadLink, resultJson));
     }
 
-    // API / cURL හරහා පැමිණි විට Pretty JSON ලබාදීම
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).send(JSON.stringify(resultJson, null, 2));
 
