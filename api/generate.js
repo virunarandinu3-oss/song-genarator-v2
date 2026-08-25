@@ -3,19 +3,7 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Producer Tag & Prompt Builder
-function buildFinalPrompt(prompt, style, customLyrics, lyricsMode) {
-  const cleanPrompt = prompt.replace(/[\u0D80-\u0DFF]/g, '').trim();
-  const producerTag = `[Intro]\n(Powered by Viru Beatz)\n\n`;
-
-  if (lyricsMode === 'custom' && customLyrics) {
-    return `${producerTag}${customLyrics}\n\n[Style: ${style}, English Vocals Only]`;
-  } else {
-    return `[Intro: (Powered by Viru Beatz)]\nStart with the spoken intro line: "Powered by Viru Beatz"\n${cleanPrompt}\nGenre: ${style}\nVocals: English studio vocals only.`;
-  }
-}
-
-// Lyrics Formatting Helper
+// Formatting Helper
 function formatLyrics(rawLyrics) {
   if (!rawLyrics) return "";
   return rawLyrics
@@ -35,31 +23,40 @@ module.exports = async (req, res) => {
   const params = req.method === 'GET' ? req.query : (req.body || {});
 
   const {
-    prompt = '',
-    lyrics_mode = 'auto',
-    custom_lyrics = '',
-    style = 'EDM, Dance, Pop',
-    mode = 'pro',
+    lyrics = '',                // ඔබගේ Custom Lyrics (අනිවාර්යයි)
+    style = 'Pop, EDM, Dance',  // Music Style / Genre
+    title = '',                 // Song Title (Optional)
+    mode = 'pro',               // 'pro' (v5) හෝ 'normal' (v4)
     instrumental = false,
     token = process.env.REMUSIC_TOKEN || ''
   } = params;
 
-  if (!prompt && lyrics_mode === 'auto') {
+  // Lyrics ලබාදී නොමැති නම් උපදෙස් පෙන්වීම
+  if (!lyrics && !instrumental) {
     return res.status(400).send(JSON.stringify({
-      error: "Prompt is required.",
-      usage: `https://${req.headers.host}/api/generate?prompt=Fast+club+banger&style=EDM,Pop&mode=pro`
+      error: "Field 'lyrics' is required for song generation.",
+      example_usage: `https://${req.headers.host}/api/generate?lyrics=Dancing+in+the+neon+light+feel+the+rhythm+all+night&style=EDM,Dance,Club&title=Neon+Party&mode=pro`
     }, null, 2));
   }
 
   try {
     const anonymousUserId = crypto.randomUUID();
-    const finalPrompt = buildFinalPrompt(prompt, style, custom_lyrics, lyrics_mode);
-    const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
 
+    // 1. ගීතයේ මුලටම "Powered by Viru Beatz" Voice Tag එක Inject කිරීම
+    const producerTag = `[Intro]\n(Powered by Viru Beatz)\n\n`;
+    const cleanUserLyrics = lyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
+    const finalLyrics = producerTag + cleanUserLyrics;
+
+    const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
+    const finalTitle = title || (cleanUserLyrics ? cleanUserLyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
+
+    // 2. Remusic Custom Lyrics Payload (Mode: 2)
     const payload = {
-      mode: lyrics_mode === 'custom' ? 2 : 1,
+      mode: 2, // Manual / Custom Lyrics Mode
       supplier: 12,
-      prompt: finalPrompt,
+      prompt: style, // Music Style
+      lyrics: isInstrumentalBool ? '' : finalLyrics,
+      title: finalTitle,
       is_instrumental: isInstrumentalBool,
       is_public: true,
       mv: mode === 'normal' ? 'v4' : 'v5'
@@ -98,20 +95,19 @@ module.exports = async (req, res) => {
 
     const songData = response.data.data[0] || {};
     const songId = songData.song_id;
-    const title = songData.title || prompt;
-    const formattedLyrics = formatLyrics(songData.lyrics);
 
-    // පිරිසිදු කෙටි Output එක (No percentage, No success, No stream/download links)
-    const cleanInitialOutput = {
-      title: title,
+    // පිරිසිදු කෙටි Initial Output
+    const cleanOutput = {
+      title: finalTitle,
+      style: style,
       artist: "Viru Beatz",
       owner: "Viruna Randinu",
       song_id: songId,
       check_status_url: songId ? `https://${req.headers.host}/api/status?song_id=${songId}` : null,
-      lyrics: formattedLyrics
+      lyrics: formatLyrics(songData.lyrics || finalLyrics)
     };
 
-    return res.status(200).send(JSON.stringify(cleanInitialOutput, null, 2));
+    return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
 
   } catch (error) {
     const errorDetails = error.response ? error.response.data : error.message;
