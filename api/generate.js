@@ -3,10 +3,28 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Female Whisper Producer Tag Builder
-function buildFinalLyrics(userLyrics) {
+// Vocal Mode & Producer Tag Builder
+function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
-  return `[Intro: Female Spoken Whisper]\n[Female Voice: "Powered by Viru Beatz"]\n[Beat Drop]\n\n${cleanUserLyrics}`;
+  
+  let vocalInstruction = "Vocals: Professional studio vocals.";
+  let introTag = `[Intro]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+
+  if (voice === 'female') {
+    vocalInstruction = "Vocals: Smooth, melodic female vocals throughout.";
+    introTag = `[Intro: Female Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+  } else if (voice === 'male') {
+    vocalInstruction = "Vocals: Energetic, clear male vocals throughout.";
+    introTag = `[Intro: Male Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+  } else if (voice === 'collab' || voice === 'duet' || voice === 'both') {
+    vocalInstruction = "Vocals: Dynamic male and female collaboration duet vocals.";
+    introTag = `[Intro: Collab Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+  }
+
+  const finalLyrics = `${introTag}${cleanUserLyrics}`;
+  const finalPrompt = `Style: ${style}. ${vocalInstruction} Song starts with smooth spoken intro 'Powered by Viru Beatz' right before the beat drop.`;
+
+  return { finalLyrics, finalPrompt };
 }
 
 module.exports = async (req, res) => {
@@ -17,7 +35,6 @@ module.exports = async (req, res) => {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Response එක ගිය සැණින් Container එක Clean Reset කිරීම
   res.on('finish', () => {
     setTimeout(() => {
       try { process.exit(0); } catch (e) {}
@@ -29,6 +46,7 @@ module.exports = async (req, res) => {
   const {
     lyrics = '',
     style = 'Pop, EDM, Dance',
+    voice = 'collab',           // 'male', 'female', හෝ 'collab'
     title = '',
     mode = 'pro',
     instrumental = false,
@@ -38,22 +56,20 @@ module.exports = async (req, res) => {
   if (!lyrics && !instrumental) {
     return res.status(400).send(JSON.stringify({
       error: "Field 'lyrics' is required for song generation.",
-      example_usage: `https://${req.headers.host}/api/generate?lyrics=Dancing+in+the+neon+light+all+night&style=EDM,Dance&title=Neon+Party&mode=pro`
+      example_usage: `https://${req.headers.host}/api/generate?lyrics=Dancing+in+the+neon+light+all+night&style=EDM,Dance&voice=collab&title=Neon+Party&mode=pro`
     }, null, 2));
   }
 
   try {
     const anonymousUserId = crypto.randomUUID();
-    const finalLyrics = buildFinalLyrics(lyrics);
+    const { finalLyrics, finalPrompt } = buildFinalPromptAndLyrics(lyrics, style, voice);
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
     const cleanTitle = title || (lyrics ? lyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
-
-    const promptWithFemaleIntro = `Style: ${style}. Song intro starts with a sexy female spoken whisper voice tag: "Powered by Viru Beatz", followed by a heavy energetic beat drop.`;
 
     const payload = {
       mode: 2,
       supplier: 12,
-      prompt: promptWithFemaleIntro,
+      prompt: finalPrompt,
       lyrics: isInstrumentalBool ? '' : finalLyrics,
       title: cleanTitle,
       is_instrumental: isInstrumentalBool,
@@ -97,12 +113,13 @@ module.exports = async (req, res) => {
     const finalTitle = songData.title || cleanTitle;
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
 
-    // Viru Beatz Branded Cover Image URL
-    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&img=${encodeURIComponent(rawImage)}`;
+    // 16:9 Branded Cover Art URL
+    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
 
     const cleanOutput = {
       title: finalTitle,
       style: style,
+      voice: voice,
       artist: "Viru Beatz",
       owner: "Viruna Randinu",
       image_url: brandedImageUrl,
