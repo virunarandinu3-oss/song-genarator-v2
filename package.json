@@ -1,5 +1,5 @@
 {
-  "name": "viru-beatz-api",
+  "name": "viru-music-api",
   "version": "1.0.0",
   "main": "api/generate.js",
   "dependencies": {
