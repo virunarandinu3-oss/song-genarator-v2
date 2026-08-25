@@ -61,7 +61,6 @@ module.exports = async (req, res) => {
     const isComplete = songData.status === 'complete' || songData.status === 'completed' || !!audioUrl;
     const percentage = songData.percentage || (isComplete ? 100 : 50);
     const title = songData.title || "Viru Beatz Track";
-    const formattedLyrics = formatLyrics(songData.lyrics);
 
     const cleanStatusOutput = {
       status: isComplete ? "complete" : (songData.status || "rendering"),
@@ -71,7 +70,7 @@ module.exports = async (req, res) => {
       owner: "Viruna Randinu",
       stream_link: audioUrl || null,
       download_link: audioUrl ? `https://${req.headers.host}/api/download?audio_url=${encodeURIComponent(audioUrl)}&song_title=${encodeURIComponent(title)}` : null,
-      lyrics: formattedLyrics,
+      lyrics: formatLyrics(songData.lyrics),
       check_status_url: `https://${req.headers.host}/api/status?song_id=${song_id}`
     };
 
