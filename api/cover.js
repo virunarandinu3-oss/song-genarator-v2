@@ -25,16 +25,16 @@ module.exports = async (req, res) => {
     <!-- Gradient Overlay -->
     <rect width="1280" height="720" fill="url(#bgGrad)" />
 
-    <!-- Top Left Badge: POWERED BY VIRU BEATZ -->
+    <!-- Top Left Badge: POWERED BY VIRU BEATZ™ -->
     <g transform="translate(60, 50)">
-      <rect width="320" height="46" rx="23" fill="#0284c7" fill-opacity="0.9" />
-      <text x="160" y="29" font-family="'Segoe UI', Arial, sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1.5">⚡ POWERED BY VIRU BEATZ</text>
+      <rect width="340" height="46" rx="23" fill="#0284c7" fill-opacity="0.9" />
+      <text x="170" y="29" font-family="'Segoe UI', Arial, sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="1.5">⚡ POWERED BY VIRU BEATZ™</text>
     </g>
 
     <!-- Top Right: Vocal Mode Badge -->
-    <g transform="translate(980, 50)">
-      <rect width="240" height="46" rx="23" fill="#1e293b" fill-opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
-      <text x="120" y="29" font-family="'Segoe UI', Arial, sans-serif" font-size="15" font-weight="700" fill="#38bdf8" text-anchor="middle" letter-spacing="1">🎙 ${voice.toUpperCase()} VOCALS</text>
+    <g transform="translate(960, 50)">
+      <rect width="260" height="46" rx="23" fill="#1e293b" fill-opacity="0.9" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="130" y="29" font-family="'Segoe UI', Arial, sans-serif" font-size="15" font-weight="700" fill="#38bdf8" text-anchor="middle" letter-spacing="1">🎙 ${voice.toUpperCase()} VOCALS</text>
     </g>
 
     <!-- EQ Visualizer Bars -->
@@ -53,8 +53,8 @@ module.exports = async (req, res) => {
     <!-- Genre / Style -->
     <text x="60" y="630" font-family="'Segoe UI', Arial, sans-serif" font-size="22" font-weight="600" fill="#38bdf8" letter-spacing="1.5">${style.substring(0, 40)}</text>
     
-    <!-- Producer Tagline -->
-    <text x="60" y="670" font-family="'Segoe UI', Arial, sans-serif" font-size="15" font-weight="700" fill="#94a3b8" letter-spacing="2">PRODUCED BY VIRUNA RANDINU • 2026</text>
+    <!-- Producer Tagline with TM -->
+    <text x="60" y="670" font-family="'Segoe UI', Arial, sans-serif" font-size="15" font-weight="800" fill="#94a3b8" letter-spacing="2">API CREATED BY VIRUNA RANDINU™ • POWERED BY VIRU BEATZ™ • 2026</text>
   </svg>`;
 
   return res.status(200).send(svg);
