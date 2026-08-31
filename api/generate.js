@@ -3,6 +3,20 @@ const crypto = require('crypto');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
+// Ultra-Fast Rotating Edge Gateways (< 2s Response)
+const FAST_ROTATING_GATEWAYS = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => url // Direct High-Speed Fallback
+];
+
+// Random Dynamic Residential IP Generator
+function getRandomResidentialIp() {
+  const prefixes = [112, 122, 175, 182, 103, 49, 117, 203];
+  const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+  return `${p}.${Math.floor(Math.random() * 250 + 1)}.${Math.floor(Math.random() * 250 + 1)}.${Math.floor(Math.random() * 250 + 1)}`;
+}
+
 function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
   
@@ -37,8 +51,7 @@ module.exports = async (req, res) => {
     voice = 'collab',
     title = '',
     mode = 'pro',
-    instrumental = false,
-    token = process.env.REMUSIC_TOKEN || ''
+    instrumental = false
   } = params;
 
   if (!lyrics && !instrumental) {
@@ -49,7 +62,6 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const anonymousUserId = crypto.randomUUID();
     const { finalLyrics, finalPrompt } = buildFinalPromptAndLyrics(lyrics, style, voice);
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
     const cleanTitle = title || (lyrics ? lyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
@@ -65,39 +77,55 @@ module.exports = async (req, res) => {
       mv: mode === 'normal' ? 'v4' : 'v5'
     };
 
-    const headers = {
-      'accept': 'application/json, text/plain, */*',
-      'accept-language': 'en-US,en;q=0.9',
-      'content-type': 'application/json',
-      'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D${token ? `; token=${token}` : ''}`,
-      'origin': 'https://remusic.ai',
-      'priority': 'u=1, i',
-      'referer': 'https://remusic.ai/ai-music-generator',
-      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
-      'sec-fetch-dest': 'empty',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-site': 'same-origin',
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    };
+    let songData = null;
+    let lastError = null;
 
-    if (token) {
-      headers['authorization'] = `Bearer ${token}`;
-      headers['x-token'] = token;
+    // Fast Rotating Gateways හරහා තත්පර 3-4ක Fast Timeout එකක් සහිතව Request එක යැවීම
+    for (const getGatewayUrl of FAST_ROTATING_GATEWAYS) {
+      const anonymousUserId = crypto.randomUUID();
+      const randomIp = getRandomResidentialIp();
+
+      const headers = {
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'en-US,en;q=0.9',
+        'content-type': 'application/json',
+        'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
+        'origin': 'https://remusic.ai',
+        'priority': 'u=1, i',
+        'referer': 'https://remusic.ai/ai-music-generator',
+        'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'X-Forwarded-For': randomIp,
+        'X-Real-IP': randomIp
+      };
+
+      try {
+        const targetUrl = getGatewayUrl(REMUSIC_API_ENDPOINT);
+        const response = await axios.post(targetUrl, payload, { headers, timeout: 4500 });
+
+        if (response.data && response.data.code === 100000 && response.data.data) {
+          songData = response.data.data[0];
+          break; // සාර්ථක වූ සැණින් එළියට එන්න
+        } else {
+          lastError = response.data;
+        }
+      } catch (err) {
+        lastError = err.response ? err.response.data : err.message;
+      }
     }
 
-    // Direct High-Speed Request (Timeout: 10s)
-    const response = await axios.post(REMUSIC_API_ENDPOINT, payload, { headers, timeout: 10000 });
-
-    if (response.data.code !== 100000 || !response.data.data) {
+    if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: response.data.message || "Generation rejected",
-        details: response.data
+        error: "All fast channels busy. Retrying...",
+        details: lastError
       }, null, 2));
     }
 
-    const songData = response.data.data[0] || {};
     const songId = songData.song_id;
     const finalTitle = songData.title || cleanTitle;
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
@@ -116,10 +144,9 @@ module.exports = async (req, res) => {
     return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
 
   } catch (error) {
-    const errorDetails = error.response ? error.response.data : error.message;
     return res.status(500).send(JSON.stringify({
       error: "Generation Failed",
-      details: errorDetails
+      details: error.message
     }, null, 2));
   }
 };
