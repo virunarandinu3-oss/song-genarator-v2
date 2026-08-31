@@ -23,10 +23,10 @@ module.exports = async (req, res) => {
       </filter>
     </defs>
 
-    <!-- Background Artwork Image (No Blur) -->
+    <!-- Crystal Clear Background Image (No Blur) -->
     <image href="${bgImage}" width="1280" height="720" preserveAspectRatio="xMidYMid slice" />
 
-    <!-- Bottom Gradient Overlay -->
+    <!-- Soft Bottom Shadow -->
     <rect y="380" width="1280" height="340" fill="url(#bottomShadow)" />
 
     <!-- Big Bold Song Title -->
