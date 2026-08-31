@@ -1,20 +1,36 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Ultra-Fast Rotating Edge Gateways (< 2s Response)
-const FAST_ROTATING_GATEWAYS = [
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  (url) => url // Direct High-Speed Fallback
-];
+// Live Dynamic Proxy Cache
+let liveProxyCache = [];
+let lastProxyFetch = 0;
 
-// Random Dynamic Residential IP Generator
-function getRandomResidentialIp() {
-  const prefixes = [112, 122, 175, 182, 103, 49, 117, 203];
-  const p = prefixes[Math.floor(Math.random() * prefixes.length)];
-  return `${p}.${Math.floor(Math.random() * 250 + 1)}.${Math.floor(Math.random() * 250 + 1)}.${Math.floor(Math.random() * 250 + 1)}`;
+// වේගවත්ම Live Proxies පමණක් Auto-Fetch කිරීම (Timeout < 1500ms)
+async function getDynamicProxy() {
+  const now = Date.now();
+  if (liveProxyCache.length < 15 || (now - lastProxyFetch > 300000)) {
+    try {
+      const res = await axios.get('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=1500&country=all&ssl=all&anonymity=elite', { timeout: 4000 });
+      const list = res.data.split('\r\n').map(p => p.trim()).filter(p => p && p.includes(':')).map(p => `http://${p}`);
+      if (list.length > 0) {
+        liveProxyCache = list;
+        lastProxyFetch = now;
+      }
+    } catch (e) {}
+  }
+
+  if (liveProxyCache.length > 0) {
+    const randomProxyUrl = liveProxyCache[Math.floor(Math.random() * liveProxyCache.length)];
+    try {
+      return new HttpsProxyAgent(randomProxyUrl);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
 }
 
 function buildFinalPromptAndLyrics(userLyrics, style, voice) {
@@ -51,7 +67,8 @@ module.exports = async (req, res) => {
     voice = 'collab',
     title = '',
     mode = 'pro',
-    instrumental = false
+    instrumental = false,
+    token = process.env.REMUSIC_TOKEN || ''
   } = params;
 
   if (!lyrics && !instrumental) {
@@ -80,16 +97,14 @@ module.exports = async (req, res) => {
     let songData = null;
     let lastError = null;
 
-    // Fast Rotating Gateways හරහා තත්පර 3-4ක Fast Timeout එකක් සහිතව Request එක යැවීම
-    for (const getGatewayUrl of FAST_ROTATING_GATEWAYS) {
+    // Fast Proxies හරහා උපරිම Attempts 3ක් වේගයෙන් Try කිරීම (Timeout: 4.5s)
+    for (let attempt = 1; attempt <= 3; attempt++) {
       const anonymousUserId = crypto.randomUUID();
-      const randomIp = getRandomResidentialIp();
-
       const headers = {
         'accept': 'application/json, text/plain, */*',
         'accept-language': 'en-US,en;q=0.9',
         'content-type': 'application/json',
-        'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D`,
+        'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D${token ? `; token=${token}` : ''}`,
         'origin': 'https://remusic.ai',
         'priority': 'u=1, i',
         'referer': 'https://remusic.ai/ai-music-generator',
@@ -99,18 +114,26 @@ module.exports = async (req, res) => {
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'X-Forwarded-For': randomIp,
-        'X-Real-IP': randomIp
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      };
+
+      if (token) {
+        headers['authorization'] = `Bearer ${token}`;
+        headers['x-token'] = token;
+      }
+
+      const proxyAgent = await getDynamicProxy();
+      const axiosConfig = {
+        headers: headers,
+        timeout: 4500, // Fast 4.5s Timeout per attempt
+        ...(proxyAgent ? { httpsAgent: proxyAgent, httpAgent: proxyAgent } : {})
       };
 
       try {
-        const targetUrl = getGatewayUrl(REMUSIC_API_ENDPOINT);
-        const response = await axios.post(targetUrl, payload, { headers, timeout: 4500 });
-
+        const response = await axios.post(REMUSIC_API_ENDPOINT, payload, axiosConfig);
         if (response.data && response.data.code === 100000 && response.data.data) {
           songData = response.data.data[0];
-          break; // සාර්ථක වූ සැණින් එළියට එන්න
+          break;
         } else {
           lastError = response.data;
         }
@@ -121,7 +144,7 @@ module.exports = async (req, res) => {
 
     if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: "All fast channels busy. Retrying...",
+        error: "Server busy. Please try again in 5 seconds.",
         details: lastError
       }, null, 2));
     }
