@@ -4,11 +4,14 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
+// Live Dynamic Proxy Cache
 let liveProxyCache = [];
 let lastProxyFetch = 0;
 
+// අන්තර්ජාලයෙන් නොමිලේ Live Proxies දහස් ගණනක් Auto-Fetch කිරීම
 async function getDynamicProxy() {
   const now = Date.now();
+  // මිනිත්තු 5කට වරක් Proxy List එක අලුත් කිරීම
   if (liveProxyCache.length < 10 || (now - lastProxyFetch > 300000)) {
     try {
       const res = await axios.get('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=elite', { timeout: 6000 });
@@ -17,7 +20,9 @@ async function getDynamicProxy() {
         liveProxyCache = list;
         lastProxyFetch = now;
       }
-    } catch (e) {}
+    } catch (e) {
+      // Fallback
+    }
   }
 
   if (liveProxyCache.length > 0) {
@@ -35,21 +40,21 @@ function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
   
   let vocalInstruction = "Vocals: Professional studio vocals.";
-  let introTag = `[Intro]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
+  let introTag = `[Intro]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
 
   if (voice === 'female') {
     vocalInstruction = "Vocals: Smooth, melodic female vocals throughout.";
-    introTag = `[Intro: Female Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
+    introTag = `[Intro: Female Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
   } else if (voice === 'male') {
     vocalInstruction = "Vocals: Energetic, clear male vocals throughout.";
-    introTag = `[Intro: Male Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
+    introTag = `[Intro: Male Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
   } else if (voice === 'collab' || voice === 'duet' || voice === 'both') {
     vocalInstruction = "Vocals: Dynamic male and female collaboration duet vocals.";
-    introTag = `[Intro: Collab Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
+    introTag = `[Intro: Collab Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
   }
 
   const finalLyrics = `${introTag}${cleanUserLyrics}`;
-  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts with 'Powered by VIRU Beatz' before the beat drop.`;
+  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts with 'Powered by Viru Beatz' before the beat drop.`;
 
   return { finalLyrics, finalPrompt };
 }
@@ -100,6 +105,7 @@ module.exports = async (req, res) => {
     let songData = null;
     let lastError = null;
 
+    // සර්වර් එක ඇතුළෙන්ම විවිධ Live Proxies හරහා Try කිරීම
     for (let attempt = 1; attempt <= 4; attempt++) {
       const anonymousUserId = crypto.randomUUID();
       const headers = {
@@ -146,7 +152,7 @@ module.exports = async (req, res) => {
 
     if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: "Server busy. Please try again in 10 seconds.",
+        error: "All proxy channels busy. Retrying in next turn...",
         details: lastError
       }, null, 2));
     }
@@ -154,17 +160,16 @@ module.exports = async (req, res) => {
     const songId = songData.song_id;
     const finalTitle = songData.title || cleanTitle;
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
-    
-    // පිරිසිදු 16:9 Cover Art Link
-    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&img=${encodeURIComponent(rawImage)}`;
+    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
 
     const cleanOutput = {
-      api_created_by: "Viruna Randinu",
-      powered_by: "VIRU Beatz",
       title: finalTitle,
       style: style,
       voice: voice,
+      artist: "Viru Beatz",
+      owner: "Viruna Randinu",
       image_url: brandedImageUrl,
+      countdown_seconds: 35,
       check_status_url: `https://${req.headers.host}/api/status?song_id=${songId}`
     };
 
