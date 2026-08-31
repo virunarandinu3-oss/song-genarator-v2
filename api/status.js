@@ -1,23 +1,6 @@
 const axios = require('axios');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_BASE = 'https://remusic.ai';
-
-function getProxyAgent() {
-  const proxyList = process.env.PROXY_LIST 
-    ? process.env.PROXY_LIST.split(',').map(p => p.trim()) 
-    : [process.env.ROTATING_PROXY, process.env.PROXY_URL].filter(Boolean);
-
-  if (proxyList.length > 0) {
-    const randomProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
-    try {
-      return new HttpsProxyAgent(randomProxy);
-    } catch (e) {
-      return null;
-    }
-  }
-  return null;
-}
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -44,42 +27,20 @@ module.exports = async (req, res) => {
     ...(token ? { 'authorization': `Bearer ${token}`, 'x-token': token } : {})
   };
 
-  const agent = getProxyAgent();
-  const axiosConfig = {
-    headers: headers,
-    timeout: 12000,
-    ...(agent ? { httpsAgent: agent, httpAgent: agent } : {})
-  };
+  try {
+    // 50% Reset වීම වැළැක්වීමට නිවැරදි Detail Endpoint එක පමණක් Call කිරීම
+    const response = await axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id: song_id }, { headers, timeout: 15000 });
 
-  const candidateEndpoints = [
-    () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id: song_id }, axiosConfig),
-    () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music`, { song_id: song_id }, axiosConfig),
-    () => axios.get(`${REMUSIC_BASE}/api/v1/ai-music/music/${song_id}`, axiosConfig)
-  ];
-
-  let songData = null;
-  let lastError = null;
-
-  for (const checkReq of candidateEndpoints) {
-    try {
-      const resp = await checkReq();
-      if (resp.data && (resp.data.data || resp.data.code === 100000)) {
-        songData = resp.data.data?.[0] || resp.data.data || resp.data;
-        break;
-      }
-    } catch (err) {
-      lastError = err.response ? err.response.data : err.message;
-    }
-  }
-
-  if (songData && typeof songData === 'object') {
+    const songData = response.data?.data?.[0] || response.data?.data || response.data || {};
     const audioUrl = songData.audio_url || songData.url || '';
-    const isComplete = songData.status === 'complete' || songData.status === 'completed' || !!audioUrl;
-    const percentage = songData.percentage || (isComplete ? 100 : 50);
+    const isComplete = songData.status === 'complete' || songData.status === 'completed' || (audioUrl && audioUrl.startsWith('http'));
     const title = songData.title || "Viru Beatz Track";
 
+    // 1. ගීතය සෑදී අවසන් නම් -> 100% Complete
     if (isComplete && audioUrl) {
       return res.status(200).send(JSON.stringify({
+        api_created_by: "VIRUNA RANDINU™",
+        powered_by: "VIRU BEATZ™",
         status: "complete",
         percentage: "100%",
         stream_link: audioUrl,
@@ -87,16 +48,23 @@ module.exports = async (req, res) => {
       }, null, 2));
     }
 
+    // 2. තවමත් Render වෙමින් පවතී නම්
+    const rawPercentage = Number(songData.percentage) || 0;
+    const displayPercentage = rawPercentage > 0 ? `${rawPercentage}%` : "45%";
+
     return res.status(200).send(JSON.stringify({
+      api_created_by: "VIRUNA RANDINU™",
+      powered_by: "VIRU BEATZ™",
       status: "rendering",
-      percentage: `${percentage}%`,
+      percentage: displayPercentage,
       stream_link: null,
       download_link: null
     }, null, 2));
-  }
 
-  return res.status(500).send(JSON.stringify({
-    error: "Could not fetch status",
-    details: lastError
-  }, null, 2));
+  } catch (err) {
+    return res.status(500).send(JSON.stringify({
+      error: "Could not fetch status",
+      details: err.response ? err.response.data : err.message
+    }, null, 2));
+  }
 };
