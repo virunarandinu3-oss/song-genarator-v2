@@ -4,6 +4,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
+// Live Dynamic Proxy Cache
 let liveProxyCache = [];
 let lastProxyFetch = 0;
 
@@ -31,25 +32,21 @@ async function getDynamicProxy() {
   return null;
 }
 
+// User ගේ Pure Lyrics පමණක් සකස් කිරීම (Text Intro Injection ඉවත් කර ඇත)
 function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
   
   let vocalInstruction = "Vocals: Professional studio vocals.";
-  let introTag = `[Intro]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
-
   if (voice === 'female') {
     vocalInstruction = "Vocals: Smooth, melodic female vocals throughout.";
-    introTag = `[Intro: Female Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
   } else if (voice === 'male') {
     vocalInstruction = "Vocals: Energetic, clear male vocals throughout.";
-    introTag = `[Intro: Male Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
   } else if (voice === 'collab' || voice === 'duet' || voice === 'both') {
     vocalInstruction = "Vocals: Dynamic male and female collaboration duet vocals.";
-    introTag = `[Intro: Collab Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
   }
 
-  const finalLyrics = `${introTag}${cleanUserLyrics}`;
-  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts with 'Powered by VIRU Beatz' before the beat drop.`;
+  const finalLyrics = cleanUserLyrics;
+  const finalPrompt = `Style: ${style}. ${vocalInstruction}`;
 
   return { finalLyrics, finalPrompt };
 }
@@ -154,9 +151,8 @@ module.exports = async (req, res) => {
     const songId = songData.song_id;
     const finalTitle = songData.title || cleanTitle;
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
-    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
+    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&img=${encodeURIComponent(rawImage)}`;
 
-    // Clean Output (Viruna Randinu / VIRU Beatz branding)
     const cleanOutput = {
       api_created_by: "Viruna Randinu",
       powered_by: "VIRU Beatz",
