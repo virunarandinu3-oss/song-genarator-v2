@@ -28,19 +28,19 @@ module.exports = async (req, res) => {
   };
 
   try {
-    // 50% Reset වීම වැළැක්වීමට නිවැරදි Detail Endpoint එක පමණක් Call කිරීම
+    // 1. Task Detail Endpoint
     const response = await axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id: song_id }, { headers, timeout: 15000 });
 
     const songData = response.data?.data?.[0] || response.data?.data || response.data || {};
-    const audioUrl = songData.audio_url || songData.url || '';
-    const isComplete = songData.status === 'complete' || songData.status === 'completed' || (audioUrl && audioUrl.startsWith('http'));
-    const title = songData.title || "Viru Beatz Track";
+    const audioUrl = songData.audio_url || songData.url || songData.audio || '';
+    const isComplete = songData.status === 'complete' || songData.status === 'completed' || songData.status === 'success' || (typeof audioUrl === 'string' && audioUrl.startsWith('http'));
+    const title = songData.title || "VIRU Beatz Track";
 
-    // 1. ගීතය සෑදී අවසන් නම් -> 100% Complete
+    // 2. ගීතය සෑදී අවසන් නම් -> ස්ථිරවම 100% Complete
     if (isComplete && audioUrl) {
       return res.status(200).send(JSON.stringify({
-        api_created_by: "VIRUNA RANDINU™",
-        powered_by: "VIRU BEATZ™",
+        api_created_by: "Viruna Randinu",
+        powered_by: "VIRU Beatz",
         status: "complete",
         percentage: "100%",
         stream_link: audioUrl,
@@ -48,15 +48,20 @@ module.exports = async (req, res) => {
       }, null, 2));
     }
 
-    // 2. තවමත් Render වෙමින් පවතී නම්
-    const rawPercentage = Number(songData.percentage) || 0;
-    const displayPercentage = rawPercentage > 0 ? `${rawPercentage}%` : "45%";
+    // 3. තවමත් Render වෙමින් පවතී නම් (Dynamic Progressive Percentage - Never stuck at 45%)
+    let progressVal = Number(songData.percentage) || 0;
+    if (progressVal <= 0 && songData.create_time) {
+      const elapsed = Math.floor(Date.now() / 1000) - Number(songData.create_time);
+      progressVal = Math.min(95, Math.max(10, Math.floor((elapsed / 35) * 100)));
+    } else if (progressVal <= 0) {
+      progressVal = 40;
+    }
 
     return res.status(200).send(JSON.stringify({
-      api_created_by: "VIRUNA RANDINU™",
-      powered_by: "VIRU BEATZ™",
+      api_created_by: "Viruna Randinu",
+      powered_by: "VIRU Beatz",
       status: "rendering",
-      percentage: displayPercentage,
+      percentage: `${progressVal}%`,
       stream_link: null,
       download_link: null
     }, null, 2));
