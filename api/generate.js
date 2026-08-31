@@ -4,7 +4,6 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// Live Dynamic Proxy Cache
 let liveProxyCache = [];
 let lastProxyFetch = 0;
 
@@ -36,21 +35,21 @@ function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
   
   let vocalInstruction = "Vocals: Professional studio vocals.";
-  let introTag = `[Intro]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+  let introTag = `[Intro]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
 
   if (voice === 'female') {
     vocalInstruction = "Vocals: Smooth, melodic female vocals throughout.";
-    introTag = `[Intro: Female Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+    introTag = `[Intro: Female Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
   } else if (voice === 'male') {
     vocalInstruction = "Vocals: Energetic, clear male vocals throughout.";
-    introTag = `[Intro: Male Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+    introTag = `[Intro: Male Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
   } else if (voice === 'collab' || voice === 'duet' || voice === 'both') {
     vocalInstruction = "Vocals: Dynamic male and female collaboration duet vocals.";
-    introTag = `[Intro: Collab Voice]\nPowered by Viru Beatz\n[Beat Drop]\n\n`;
+    introTag = `[Intro: Collab Voice]\nPowered by VIRU Beatz\n[Beat Drop]\n\n`;
   }
 
   const finalLyrics = `${introTag}${cleanUserLyrics}`;
-  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts with 'Powered by Viru Beatz' before the beat drop.`;
+  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts with 'Powered by VIRU Beatz' before the beat drop.`;
 
   return { finalLyrics, finalPrompt };
 }
@@ -147,7 +146,7 @@ module.exports = async (req, res) => {
 
     if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: "All proxy channels busy. Please try again in 5 seconds.",
+        error: "Server busy. Please try again in 10 seconds.",
         details: lastError
       }, null, 2));
     }
@@ -157,10 +156,10 @@ module.exports = async (req, res) => {
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
     const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
 
-    // Clean Initial Output (countdown_seconds ඉවත් කර TM Branding ඇතුළත් කර ඇත)
+    // Clean Output (Viruna Randinu / VIRU Beatz branding)
     const cleanOutput = {
-      api_created_by: "VIRUNA RANDINU™",
-      powered_by: "VIRU BEATZ™",
+      api_created_by: "Viruna Randinu",
+      powered_by: "VIRU Beatz",
       title: finalTitle,
       style: style,
       voice: voice,
