@@ -4,21 +4,31 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 
-// 1. IP Rotation Proxy Pool (ඔබගේ Proxies මෙතැනට දැමිය හැක හෝ Environment Variable එකෙන් ලබාගනී)
-const DEFAULT_PROXIES = [
-  process.env.ROTATING_PROXY,
-  process.env.PROXY_URL
-].filter(Boolean);
+// Live Dynamic Proxy Cache
+let liveProxyCache = [];
+let lastProxyFetch = 0;
 
-function getProxyAgent() {
-  const proxyList = process.env.PROXY_LIST 
-    ? process.env.PROXY_LIST.split(',').map(p => p.trim()) 
-    : DEFAULT_PROXIES;
-
-  if (proxyList.length > 0) {
-    const randomProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
+// අන්තර්ජාලයෙන් නොමිලේ Live Proxies දහස් ගණනක් Auto-Fetch කිරීම
+async function getDynamicProxy() {
+  const now = Date.now();
+  // මිනිත්තු 5කට වරක් Proxy List එක අලුත් කිරීම
+  if (liveProxyCache.length < 10 || (now - lastProxyFetch > 300000)) {
     try {
-      return new HttpsProxyAgent(randomProxy);
+      const res = await axios.get('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=elite', { timeout: 6000 });
+      const list = res.data.split('\r\n').map(p => p.trim()).filter(p => p && p.includes(':')).map(p => `http://${p}`);
+      if (list.length > 0) {
+        liveProxyCache = list;
+        lastProxyFetch = now;
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  if (liveProxyCache.length > 0) {
+    const randomProxyUrl = liveProxyCache[Math.floor(Math.random() * liveProxyCache.length)];
+    try {
+      return new HttpsProxyAgent(randomProxyUrl);
     } catch (e) {
       return null;
     }
@@ -77,7 +87,6 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const anonymousUserId = crypto.randomUUID();
     const { finalLyrics, finalPrompt } = buildFinalPromptAndLyrics(lyrics, style, voice);
     const isInstrumentalBool = String(instrumental).toLowerCase() === 'true';
     const cleanTitle = title || (lyrics ? lyrics.split('\n')[0].substring(0, 30) : "Viru Beatz Track");
@@ -93,52 +102,66 @@ module.exports = async (req, res) => {
       mv: mode === 'normal' ? 'v4' : 'v5'
     };
 
-    const headers = {
-      'accept': 'application/json, text/plain, */*',
-      'accept-language': 'en-US,en;q=0.9',
-      'content-type': 'application/json',
-      'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D${token ? `; token=${token}` : ''}`,
-      'origin': 'https://remusic.ai',
-      'priority': 'u=1, i',
-      'referer': 'https://remusic.ai/ai-music-generator',
-      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
-      'sec-fetch-dest': 'empty',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-site': 'same-origin',
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    };
+    let songData = null;
+    let lastError = null;
 
-    if (token) {
-      headers['authorization'] = `Bearer ${token}`;
-      headers['x-token'] = token;
+    // සර්වර් එක ඇතුළෙන්ම විවිධ Live Proxies හරහා Try කිරීම
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const anonymousUserId = crypto.randomUUID();
+      const headers = {
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'en-US,en;q=0.9',
+        'content-type': 'application/json',
+        'cookie': `anonymous_user_id=${anonymousUserId}; dashboard-sidebar-v-0-0=%7B%22size%22%3A15%2C%22collapsed%22%3Afalse%7D${token ? `; token=${token}` : ''}`,
+        'origin': 'https://remusic.ai',
+        'priority': 'u=1, i',
+        'referer': 'https://remusic.ai/ai-music-generator',
+        'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      };
+
+      if (token) {
+        headers['authorization'] = `Bearer ${token}`;
+        headers['x-token'] = token;
+      }
+
+      const proxyAgent = await getDynamicProxy();
+      const axiosConfig = {
+        headers: headers,
+        timeout: 15000,
+        ...(proxyAgent ? { httpsAgent: proxyAgent, httpAgent: proxyAgent } : {})
+      };
+
+      try {
+        const response = await axios.post(REMUSIC_API_ENDPOINT, payload, axiosConfig);
+        if (response.data && response.data.code === 100000 && response.data.data) {
+          songData = response.data.data[0];
+          break;
+        } else {
+          lastError = response.data;
+        }
+      } catch (err) {
+        lastError = err.response ? err.response.data : err.message;
+      }
     }
 
-    // IP Rotation Agent ලබාගැනීම
-    const agent = getProxyAgent();
-    const axiosConfig = {
-      headers: headers,
-      timeout: 25000,
-      ...(agent ? { httpsAgent: agent, httpAgent: agent } : {})
-    };
-
-    const response = await axios.post(REMUSIC_API_ENDPOINT, payload, axiosConfig);
-
-    if (response.data.code !== 100000 || !response.data.data) {
+    if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: response.data.message || "Generation rejected",
-        details: response.data
+        error: "All proxy channels busy. Retrying in next turn...",
+        details: lastError
       }, null, 2));
     }
 
-    const songData = response.data.data[0] || {};
     const songId = songData.song_id;
     const finalTitle = songData.title || cleanTitle;
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
     const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
 
-    // පිරිසිදු ස්ථාවර Initial JSON Output (Auto-Refresh Headers ඉවත් කර ඇත)
     const cleanOutput = {
       title: finalTitle,
       style: style,
@@ -153,10 +176,9 @@ module.exports = async (req, res) => {
     return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
 
   } catch (error) {
-    const errorDetails = error.response ? error.response.data : error.message;
-    return res.status(error.response ? error.response.status : 500).send(JSON.stringify({
+    return res.status(500).send(JSON.stringify({
       error: "Generation Failed",
-      details: errorDetails
+      details: error.message
     }, null, 2));
   }
 };
