@@ -27,30 +27,11 @@ module.exports = async (req, res) => {
     ...(token ? { 'authorization': `Bearer ${token}`, 'x-token': token } : {})
   };
 
-  const candidateEndpoints = [
-    () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id: song_id }, { headers, timeout: 10000 }),
-    () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music`, { song_id: song_id }, { headers, timeout: 10000 }),
-    () => axios.get(`${REMUSIC_BASE}/api/v1/ai-music/music/${song_id}`, { headers, timeout: 10000 }),
-    () => axios.get(`${REMUSIC_BASE}/api/v1/ai-music/song?song_id=${song_id}`, { headers, timeout: 10000 })
-  ];
+  try {
+    const response = await axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id }, { headers, timeout: 8000 });
 
-  let songData = null;
-  let lastError = null;
-
-  for (const checkReq of candidateEndpoints) {
-    try {
-      const resp = await checkReq();
-      if (resp.data && (resp.data.data || resp.data.code === 100000)) {
-        songData = resp.data.data?.[0] || resp.data.data || resp.data;
-        break;
-      }
-    } catch (err) {
-      lastError = err.response ? err.response.data : err.message;
-    }
-  }
-
-  if (songData && typeof songData === 'object') {
-    const audioUrl = songData.audio_url || songData.url || songData.audio || songData.music_url || '';
+    const songData = response.data?.data?.[0] || response.data?.data || response.data || {};
+    const audioUrl = songData.audio_url || songData.url || songData.audio || '';
     const isComplete = songData.status === 'complete' || songData.status === 'completed' || songData.status === 'success' || (typeof audioUrl === 'string' && audioUrl.startsWith('http'));
     const title = songData.title || "VIRU Beatz Track";
 
@@ -76,10 +57,11 @@ module.exports = async (req, res) => {
       stream_link: null,
       download_link: null
     }, null, 2));
-  }
 
-  return res.status(500).send(JSON.stringify({
-    error: "Could not fetch status",
-    details: lastError
-  }, null, 2));
+  } catch (err) {
+    return res.status(500).send(JSON.stringify({
+      error: "Could not fetch status",
+      details: err.response ? err.response.data : err.message
+    }, null, 2));
+  }
 };
