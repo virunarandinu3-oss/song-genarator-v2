@@ -1,7 +1,30 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
+
+// 1. IP Rotation Proxy Pool (ඔබගේ Proxies මෙතැනට දැමිය හැක හෝ Environment Variable එකෙන් ලබාගනී)
+const DEFAULT_PROXIES = [
+  process.env.ROTATING_PROXY,
+  process.env.PROXY_URL
+].filter(Boolean);
+
+function getProxyAgent() {
+  const proxyList = process.env.PROXY_LIST 
+    ? process.env.PROXY_LIST.split(',').map(p => p.trim()) 
+    : DEFAULT_PROXIES;
+
+  if (proxyList.length > 0) {
+    const randomProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
+    try {
+      return new HttpsProxyAgent(randomProxy);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
 
 function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
@@ -21,7 +44,7 @@ function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   }
 
   const finalLyrics = `${introTag}${cleanUserLyrics}`;
-  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts smoothly with spoken 'Powered by Viru Beatz' before the beat drop.`;
+  const finalPrompt = `Style: ${style}. ${vocalInstruction} Intro starts with 'Powered by Viru Beatz' before the beat drop.`;
 
   return { finalLyrics, finalPrompt };
 }
@@ -31,7 +54,6 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -84,4 +106,57 @@ module.exports = async (req, res) => {
       'sec-ch-ua-platform': '"Windows"',
       'sec-fetch-dest': 'empty',
       'sec-fetch-mode': 'cors',
-      'sec-fetch-site
+      'sec-fetch-site': 'same-origin',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+    };
+
+    if (token) {
+      headers['authorization'] = `Bearer ${token}`;
+      headers['x-token'] = token;
+    }
+
+    // IP Rotation Agent ලබාගැනීම
+    const agent = getProxyAgent();
+    const axiosConfig = {
+      headers: headers,
+      timeout: 25000,
+      ...(agent ? { httpsAgent: agent, httpAgent: agent } : {})
+    };
+
+    const response = await axios.post(REMUSIC_API_ENDPOINT, payload, axiosConfig);
+
+    if (response.data.code !== 100000 || !response.data.data) {
+      return res.status(400).send(JSON.stringify({
+        error: response.data.message || "Generation rejected",
+        details: response.data
+      }, null, 2));
+    }
+
+    const songData = response.data.data[0] || {};
+    const songId = songData.song_id;
+    const finalTitle = songData.title || cleanTitle;
+    const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
+    const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
+
+    // පිරිසිදු ස්ථාවර Initial JSON Output (Auto-Refresh Headers ඉවත් කර ඇත)
+    const cleanOutput = {
+      title: finalTitle,
+      style: style,
+      voice: voice,
+      artist: "Viru Beatz",
+      owner: "Viruna Randinu",
+      image_url: brandedImageUrl,
+      countdown_seconds: 35,
+      check_status_url: `https://${req.headers.host}/api/status?song_id=${songId}`
+    };
+
+    return res.status(200).send(JSON.stringify(cleanOutput, null, 2));
+
+  } catch (error) {
+    const errorDetails = error.response ? error.response.data : error.message;
+    return res.status(error.response ? error.response.status : 500).send(JSON.stringify({
+      error: "Generation Failed",
+      details: errorDetails
+    }, null, 2));
+  }
+};
