@@ -27,7 +27,6 @@ module.exports = async (req, res) => {
     ...(token ? { 'authorization': `Bearer ${token}`, 'x-token': token } : {})
   };
 
-  // Remusic Status ලබාගන්නා සියලුම Endpoints (කලින් සාර්ථකව වැඩ කළ ක්‍රමය)
   const candidateEndpoints = [
     () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music/detail`, { song_id: song_id }, { headers, timeout: 10000 }),
     () => axios.post(`${REMUSIC_BASE}/api/v1/ai-music/music`, { song_id: song_id }, { headers, timeout: 10000 }),
@@ -55,7 +54,6 @@ module.exports = async (req, res) => {
     const isComplete = songData.status === 'complete' || songData.status === 'completed' || songData.status === 'success' || (typeof audioUrl === 'string' && audioUrl.startsWith('http'));
     const title = songData.title || "VIRU Beatz Track";
 
-    // 1. ගීතය සෑදී අවසන් නම් -> 100% Complete & Links ලබාදීම
     if (isComplete && audioUrl) {
       return res.status(200).send(JSON.stringify({
         api_created_by: "Viruna Randinu",
@@ -67,7 +65,6 @@ module.exports = async (req, res) => {
       }, null, 2));
     }
 
-    // 2. තවමත් Render වෙමින් පවතී නම්
     const remusicPercentage = Number(songData.percentage) || 0;
     const displayPercentage = remusicPercentage > 0 ? `${remusicPercentage}%` : "50%";
 
