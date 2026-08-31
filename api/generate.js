@@ -8,10 +8,8 @@ const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 let liveProxyCache = [];
 let lastProxyFetch = 0;
 
-// අන්තර්ජාලයෙන් නොමිලේ Live Proxies දහස් ගණනක් Auto-Fetch කිරීම
 async function getDynamicProxy() {
   const now = Date.now();
-  // මිනිත්තු 5කට වරක් Proxy List එක අලුත් කිරීම
   if (liveProxyCache.length < 10 || (now - lastProxyFetch > 300000)) {
     try {
       const res = await axios.get('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=elite', { timeout: 6000 });
@@ -20,9 +18,7 @@ async function getDynamicProxy() {
         liveProxyCache = list;
         lastProxyFetch = now;
       }
-    } catch (e) {
-      // Fallback
-    }
+    } catch (e) {}
   }
 
   if (liveProxyCache.length > 0) {
@@ -105,7 +101,6 @@ module.exports = async (req, res) => {
     let songData = null;
     let lastError = null;
 
-    // සර්වර් එක ඇතුළෙන්ම විවිධ Live Proxies හරහා Try කිරීම
     for (let attempt = 1; attempt <= 4; attempt++) {
       const anonymousUserId = crypto.randomUUID();
       const headers = {
@@ -152,7 +147,7 @@ module.exports = async (req, res) => {
 
     if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: "All proxy channels busy. Retrying in next turn...",
+        error: "All proxy channels busy. Please try again in 5 seconds.",
         details: lastError
       }, null, 2));
     }
@@ -162,14 +157,14 @@ module.exports = async (req, res) => {
     const rawImage = songData.image_large_url || songData.image_url || "https://cdn.remusic.ai/remusic/presets/music/image/88ca39aa88330d58954236fe89979125.webp";
     const brandedImageUrl = `https://${req.headers.host}/api/cover?title=${encodeURIComponent(finalTitle)}&style=${encodeURIComponent(style)}&voice=${encodeURIComponent(voice)}&img=${encodeURIComponent(rawImage)}`;
 
+    // Clean Initial Output (countdown_seconds ඉවත් කර TM Branding ඇතුළත් කර ඇත)
     const cleanOutput = {
+      api_created_by: "VIRUNA RANDINU™",
+      powered_by: "VIRU BEATZ™",
       title: finalTitle,
       style: style,
       voice: voice,
-      artist: "Viru Beatz",
-      owner: "Viruna Randinu",
       image_url: brandedImageUrl,
-      countdown_seconds: 35,
       check_status_url: `https://${req.headers.host}/api/status?song_id=${songId}`
     };
 
