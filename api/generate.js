@@ -8,12 +8,11 @@ const REMUSIC_API_ENDPOINT = 'https://remusic.ai/api/v1/ai-music/music';
 let liveProxyCache = [];
 let lastProxyFetch = 0;
 
-// වේගවත්ම Live Proxies පමණක් Auto-Fetch කිරීම (Timeout < 1500ms)
 async function getDynamicProxy() {
   const now = Date.now();
-  if (liveProxyCache.length < 15 || (now - lastProxyFetch > 300000)) {
+  if (liveProxyCache.length < 10 || (now - lastProxyFetch > 300000)) {
     try {
-      const res = await axios.get('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=1500&country=all&ssl=all&anonymity=elite', { timeout: 4000 });
+      const res = await axios.get('https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=elite', { timeout: 6000 });
       const list = res.data.split('\r\n').map(p => p.trim()).filter(p => p && p.includes(':')).map(p => `http://${p}`);
       if (list.length > 0) {
         liveProxyCache = list;
@@ -33,6 +32,7 @@ async function getDynamicProxy() {
   return null;
 }
 
+// User ගේ Pure Lyrics පමණක් සකස් කිරීම (Text Intro Injection ඉවත් කර ඇත)
 function buildFinalPromptAndLyrics(userLyrics, style, voice) {
   const cleanUserLyrics = userLyrics.replace(/[\u0D80-\u0DFF]/g, '').trim();
   
@@ -97,8 +97,7 @@ module.exports = async (req, res) => {
     let songData = null;
     let lastError = null;
 
-    // Fast Proxies හරහා උපරිම Attempts 3ක් වේගයෙන් Try කිරීම (Timeout: 4.5s)
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 4; attempt++) {
       const anonymousUserId = crypto.randomUUID();
       const headers = {
         'accept': 'application/json, text/plain, */*',
@@ -125,7 +124,7 @@ module.exports = async (req, res) => {
       const proxyAgent = await getDynamicProxy();
       const axiosConfig = {
         headers: headers,
-        timeout: 4500, // Fast 4.5s Timeout per attempt
+        timeout: 15000,
         ...(proxyAgent ? { httpsAgent: proxyAgent, httpAgent: proxyAgent } : {})
       };
 
@@ -144,7 +143,7 @@ module.exports = async (req, res) => {
 
     if (!songData) {
       return res.status(400).send(JSON.stringify({
-        error: "Server busy. Please try again in 5 seconds.",
+        error: "Server busy. Please try again in 10 seconds.",
         details: lastError
       }, null, 2));
     }
